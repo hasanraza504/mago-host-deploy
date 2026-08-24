@@ -146,6 +146,10 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           # The source is a detached checkout; stop EAS resolving a VCS root.
           EAS_NO_VCS: "1"
+          # Expo 56's release dex/native tasks can exhaust Gradle's default
+          # heap when they fan out together on a hosted runner. Give D8 enough
+          # room while limiting concurrency so the runner itself stays stable.
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.workers.max=2"
           PROFILE: ${{ inputs.profile }}
           FORMAT: ${{ inputs.format }}
           APP_RELEASE_STAMP: ${{ env.APP_RELEASE_STAMP }}
