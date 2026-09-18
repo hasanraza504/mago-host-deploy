@@ -185,9 +185,20 @@ jobs:
             echo "::error::EXPECTED_SIGNING_SHA1 is not set on this repository. Refusing to publish an artifact whose signing identity nobody has declared."
             exit 1
           fi
-          actual=$(keytool -printcert -jarfile "$RUNNER_TEMP/app.$FORMAT" \
-                     | grep -m1 'SHA1:' | tr -d ' \t' | cut -d: -f2- | tr 'a-f' 'A-F')
-          want=$(printf '%s' "$EXPECTED" | tr -d ' \t' | tr 'a-f' 'A-F')
+          if [ "$FORMAT" = apk ]; then
+            # Modern APK v2/v3 signatures are not JAR signatures. Verify the
+            # archive cryptographically before comparing its signing identity.
+            verifier=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)
+            test -n "$verifier"
+            certificate=$("$verifier" verify --print-certs "$RUNNER_TEMP/app.apk")
+            actual=$(printf '%s\n' "$certificate" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | tr -d ' :\t\r' | tr 'a-f' 'A-F')
+          else
+            actual=$(keytool -printcert -jarfile "$RUNNER_TEMP/app.$FORMAT" \
+                       | grep -m1 'SHA1:' | cut -d: -f2- | tr -d ' :\t\r' | tr 'a-f' 'A-F')
+          fi
+          want=$(printf '%s' "$EXPECTED" | tr -d ' :\t\r' | tr 'a-f' 'A-F')
+          [[ "$actual" =~ ^[0-9A-F]{40}$ ]]
+          [[ "$want" =~ ^[0-9A-F]{40}$ ]]
           echo "expected  $want"
           echo "actual    $actual"
           if [ "$actual" != "$want" ]; then
