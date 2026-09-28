@@ -93,7 +93,7 @@ jobs:
 
       - uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools
+          packages: platform-tools build-tools;36.0.0
 
       - name: Install dependencies
         working-directory: ${{ env.SRC }}
@@ -188,19 +188,21 @@ jobs:
           if [ "$FORMAT" = apk ]; then
             # Modern APK v2/v3 signatures are not JAR signatures. Verify the
             # archive cryptographically before comparing its signing identity.
-            verifier=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)
-            test -n "$verifier"
+            verifier="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+            test -x "$verifier"
+            echo "Verifying APK with $verifier"
             certificate=$("$verifier" verify --print-certs "$RUNNER_TEMP/app.apk")
+            printf '%s\n' "$certificate"
             actual=$(printf '%s\n' "$certificate" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | tr -d ' :\t\r' | tr 'a-f' 'A-F')
           else
             actual=$(keytool -printcert -jarfile "$RUNNER_TEMP/app.$FORMAT" \
                        | grep -m1 'SHA1:' | cut -d: -f2- | tr -d ' :\t\r' | tr 'a-f' 'A-F')
           fi
           want=$(printf '%s' "$EXPECTED" | tr -d ' :\t\r' | tr 'a-f' 'A-F')
-          [[ "$actual" =~ ^[0-9A-F]{40}$ ]]
-          [[ "$want" =~ ^[0-9A-F]{40}$ ]]
           echo "expected  $want"
           echo "actual    $actual"
+          [[ "$actual" =~ ^[0-9A-F]{40}$ ]] || { echo "::error::Could not parse one SHA-1 signing fingerprint"; exit 1; }
+          [[ "$want" =~ ^[0-9A-F]{40}$ ]] || { echo "::error::Invalid expected signing fingerprint"; exit 1; }
           if [ "$actual" != "$want" ]; then
             echo "::error::Signing key mismatch. Play will reject this upload: expected $want, built $actual."
             exit 1
